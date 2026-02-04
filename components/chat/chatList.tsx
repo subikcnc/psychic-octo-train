@@ -9,7 +9,6 @@ import { ScrollArea } from "../ui/scroll-area";
 import Pusher from "pusher-js";
 import { getConversationId } from "@/lib/actions/conversation.action";
 import { sendTypingStatus } from "@/lib/actions/typing.action";
-import { TypingIndicator } from "./typingIndicator";
 import { FunnyTypingIndicator } from "./funnyTypingIndicator";
 import { useToken } from "@/context/tokenProvider";
 import { useRouter } from "next/navigation";
@@ -46,9 +45,12 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     useState<boolean>(false);
   const router = useRouter();
 
-  function throttle(fn, delay: number) {
+  function throttle<Args extends unknown[], Return>(
+    fn: (...args: Args) => Return,
+    delay: number,
+  ) {
     let lastCall = 0;
-    return (...args: any[]) => {
+    return (...args: Args) => {
       const now = Date.now();
       if (now - lastCall >= delay) {
         lastCall = now;
@@ -295,7 +297,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
           </div>
         ) : (
           <div className="flex w-full items-center justify-center">
-            <p className="text-xl font-bold">You are the only one here</p>
+            <p className="text-xl font-bold">No one to chat with</p>
           </div>
         )}
       </div>
