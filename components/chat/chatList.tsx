@@ -11,6 +11,8 @@ import { getConversationId } from "@/lib/actions/conversation.action";
 import { sendTypingStatus } from "@/lib/actions/typing.action";
 import { TypingIndicator } from "./typingIndicator";
 import { FunnyTypingIndicator } from "./funnyTypingIndicator";
+import { useToken } from "@/context/tokenProvider";
+import { useRouter } from "next/navigation";
 
 interface ChatListProps {
   loggedInUser: {
@@ -26,13 +28,14 @@ interface ChatListProps {
 }
 
 const ChatList = ({ loggedInUser, users }: ChatListProps) => {
+  const { setToken } = useToken();
   const pusherRef = useRef<Pusher | null>(null);
   const pusherTypingRef = useRef<Pusher | null>(null);
   const [selectedUser, setSelectedUser] = useState<{
     email: string;
     name: string;
     id: string;
-  } | null>(users[0]);
+  } | null>(users.filter((user) => user.id !== loggedInUser.id)[0] || null);
   const [messageToSend, setMessageToSend] = useState<string>("");
   const [allMessages, setAllMessages] = useState<Messages>([]);
   const [currentConversationId, setCurrentConversationId] =
@@ -41,6 +44,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   const [lastTypedAt, setLastTypedAt] = useState<Date | null>(null);
   const [showTypingIndicator, setShowTypingIndicator] =
     useState<boolean>(false);
+  const router = useRouter();
 
   function throttle(fn, delay: number) {
     let lastCall = 0;
@@ -181,6 +185,19 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     // setAllMessages(messages);
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+      localStorage.removeItem("accountToken");
+      setToken("");
+      router.push("/");
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
+
   return (
     <div className="w-full p-12 rounded-[16px] h-screen">
       <div className="grid grid-cols-[1fr_2fr] h-full border border-chat-background">
@@ -189,82 +206,98 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
             {`${loggedInUser.username}'s Chat`}{" "}
             {/* {showTypingIndicator && "is typing"} */}
           </div>
-          {users.map(
-            (user) =>
-              user.email !== loggedInUser.email && (
-                <Button
-                  key={user.email}
-                  onClick={() => {
-                    setSelectedUser(user);
-                    setCurrentConversationId("");
-                  }}
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start rounded-none border-0 px-5! py-2! cursor-pointer shadow-none bg-transparent",
-                    selectedUser?.email === user.email &&
-                      "bg-chat-active-background text-black hover:bg-chat-active-background hover:text-black",
-                  )}
-                >
-                  <span className="uppercase font-bold">{user.name}</span>
-                </Button>
-              ),
-          )}
-        </div>
-        <div className="flex-1 flex flex-col gap-4">
-          {/* Previous messages area */}
-          <div className="w-full px-5 py-6">
-            Messaging{" "}
-            <span className="font-bold uppercase">{selectedUser?.name}</span>
-          </div>
-          <div className="flex flex-col flex-1 px-5 gap-4">
-            <ScrollArea className="flex-1 border rounded-md h-full">
-              <div className="flex flex-col  gap-2 p-4 h-full justify-end">
-                {allMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex gap-2",
-                      message.accountId === loggedInUser.id && "justify-end",
-                    )}
-                  >
-                    <p
+          <div className="flex flex-col">
+            <div className="flex flex-col flex-1">
+              {users.map(
+                (user) =>
+                  user.email !== loggedInUser.email && (
+                    <Button
+                      key={user.email}
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setCurrentConversationId("");
+                      }}
+                      variant="outline"
                       className={cn(
-                        message.accountId === loggedInUser.id &&
-                          "bg-chat-bubble-background text-black",
-                        message.accountId !== loggedInUser.id && "bg-gray-300",
-                        "p-2 rounded-md m-0",
+                        "w-full justify-start rounded-none border-0 px-5! py-2! cursor-pointer shadow-none bg-transparent",
+                        selectedUser?.email === user.email &&
+                          "bg-chat-active-background text-black hover:bg-chat-active-background hover:text-black",
                       )}
                     >
-                      {message.content}
-                    </p>
-                  </div>
-                ))}
-                {showTypingIndicator && loggedInUser.id && (
-                  <div className="flex gap-2">
-                    <FunnyTypingIndicator username={selectedUser?.name} />
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-            <Textarea
-              className="h-[10%]"
-              placeholder={`Message ${selectedUser?.name}`}
-              value={messageToSend}
-              onInput={() => {
-                setIsCurrentlyTyping(true);
-                setLastTypedAt(new Date());
-                // throttledHandler.current();
-              }}
-              onChange={(e) => setMessageToSend(e.target.value)}
-            />
-            <Button
-              className="self-end mt-4 bg-chat-bubble-background text-black"
-              onClick={handleSend}
-            >
-              Send
-            </Button>
+                      <span className="uppercase font-bold">{user.name}</span>
+                    </Button>
+                  ),
+              )}
+            </div>
+            <div>
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
+        {selectedUser ? (
+          <div className="flex-1 flex flex-col gap-4">
+            {/* Previous messages area */}
+            <div className="w-full px-5 py-6">
+              Messaging{" "}
+              <span className="font-bold uppercase">{selectedUser?.name}</span>
+            </div>
+            <div className="flex flex-col flex-1 px-5 gap-4">
+              <ScrollArea className="flex-1 border rounded-md h-full">
+                <div className="flex flex-col  gap-2 p-4 h-full justify-end">
+                  {allMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex gap-2",
+                        message.accountId === loggedInUser.id && "justify-end",
+                      )}
+                    >
+                      <p
+                        className={cn(
+                          message.accountId === loggedInUser.id &&
+                            "bg-chat-bubble-background text-black",
+                          message.accountId !== loggedInUser.id &&
+                            "bg-gray-300",
+                          "p-2 rounded-md m-0",
+                        )}
+                      >
+                        {message.content}
+                      </p>
+                    </div>
+                  ))}
+                  {showTypingIndicator && loggedInUser.id && (
+                    <div className="flex gap-2">
+                      <FunnyTypingIndicator username={selectedUser?.name} />
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+              <Textarea
+                className="h-[10%]"
+                placeholder={`Message ${selectedUser?.name}`}
+                value={messageToSend}
+                onInput={() => {
+                  setIsCurrentlyTyping(true);
+                  setLastTypedAt(new Date());
+                  // throttledHandler.current();
+                }}
+                onChange={(e) => setMessageToSend(e.target.value)}
+              />
+              <Button
+                className="self-end mt-4 bg-chat-bubble-background text-black"
+                onClick={handleSend}
+              >
+                Send
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex w-full items-center justify-center">
+            <p className="text-xl font-bold">You are the only one here</p>
+          </div>
+        )}
       </div>
     </div>
   );

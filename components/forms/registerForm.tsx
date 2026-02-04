@@ -16,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useToken } from "@/context/tokenProvider";
 
 const RegisterForm = () => {
   const [name, setName] = useState("");
@@ -23,11 +24,11 @@ const RegisterForm = () => {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [loginErrorMessage, setLoginErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { token, setToken } = useToken();
 
   useEffect(() => {
     const localStorageToken = localStorage.getItem("accountToken");
@@ -35,7 +36,7 @@ const RegisterForm = () => {
       setToken(localStorageToken);
       router.push("/chat");
     }
-  }, [router]);
+  }, [router, setToken]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -102,7 +103,7 @@ const RegisterForm = () => {
       setToken(data.token);
       setLoginEmail("");
       setLoginPassword("");
-      router.push('/chat')
+      router.push("/chat");
     } catch (error) {
       console.error("Login failed", error);
     } finally {
