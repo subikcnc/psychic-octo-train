@@ -69,6 +69,10 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     [],
   );
 
+  // useEffect(() => {
+  //   setAllMessages([]);
+  // }, [selectedUser]);
+
   // This effect is to bind to specific user pusher trigger for new messages
   useEffect(() => {
     if (!pusherNewMessagesRef.current) {
@@ -229,7 +233,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
       const messages = await getMessages(currentConversationId);
       setAllMessages(messages);
     };
-
+    console.log("Fetching new messages since the conversation id changed");
     fetchMessages();
   }, [currentConversationId]);
 

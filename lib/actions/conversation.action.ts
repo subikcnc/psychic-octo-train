@@ -1,7 +1,7 @@
 "use server";
 
 import db from "@/db";
-import { conversationParticipants } from "@/db/schema";
+import { conversationParticipants, conversations } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -22,7 +22,25 @@ export async function getConversationId({
     .from(cp1)
     .innerJoin(cp2, eq(cp1.conversationId, cp2.conversationId))
     .where(and(eq(cp1.accountId, senderId), eq(cp2.accountId, receiverId)));
+  if (!conversation) {
+    const [newConversation] = await db
+      .insert(conversations)
+      .values({})
+      .returning({
+        id: conversations.id,
+      });
 
-  // console.log("This is the conversation", conversation);
+    await db.insert(conversationParticipants).values({
+      accountId: senderId,
+      conversationId: newConversation.id,
+    });
+    await db.insert(conversationParticipants).values({
+      accountId: receiverId,
+      conversationId: newConversation.id,
+    });
+
+    return newConversation.id;
+  }
+
   return conversation?.conversationId;
 }
