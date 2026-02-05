@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import db from "@/db";
 import { accounts } from "@/db/schema";
 import { verifyToken } from "../utils/jwt";
+import { eq } from "drizzle-orm";
 
 export const getUser = async () => {
   try {
@@ -13,7 +14,15 @@ export const getUser = async () => {
       throw new Error("Unauthorized");
     }
     const payload = await verifyToken(token);
-    return { id: payload.id, email: payload.email, username: payload.username };
+    const [user] = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.email, payload.email));
+    return {
+      id: user.id,
+      email: payload.email,
+      username: payload.username,
+    };
   } catch (error) {
     console.error("Error verifying token", error);
     throw new Error("Invalid token");

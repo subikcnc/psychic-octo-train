@@ -79,6 +79,9 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --chat-background: #f8f5f1;
+  --chat-bubble-background: #f1eae3;
+  --chat-active-background: #f1eae3;
 }
 
 .dark {
@@ -121,5 +124,36 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* funnyTypingIndicator.css */
+  .funny-typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #555;
+  }
+
+  .typing-username {
+    font-style: italic;
+  }
+
+  .typing-emoji {
+    display: inline-block;
+    animation: bounce 0.5s infinite alternate;
+  }
+
+  @keyframes bounce {
+    0% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+    100% {
+      transform: translateY(0);
+    }
   }
 }

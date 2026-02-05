@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     const { name, email, password } = await request.json();
-    console.log("name, email, pass in route", name, email, password);
+    // console.log("name, email, pass in route", name, email, password);
     const hashedPassword = await hashPassword(password);
 
     const [existingAccount] = await db
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         name: accounts.name,
         password: accounts.password,
       });
-    console.log("Created user", account);
+    // console.log("Created user", account);
     // Now we generate the token
     const token = await generateToken({
       id: account.id,

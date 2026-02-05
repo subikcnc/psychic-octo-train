@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
-    console.log("email, password in route", email, password);
+    // console.log("email, password in route", email, password);
     const [account] = await db
       .select()
       .from(accounts)

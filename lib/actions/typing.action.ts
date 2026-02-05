@@ -2,7 +2,6 @@
 
 import { pusher } from "../utils/pusher";
 
-
 export const sendTypingStatus = async ({
   conversationId,
   status,
@@ -12,9 +11,9 @@ export const sendTypingStatus = async ({
   status: "typing" | "stopped";
   senderId: string;
 }) => {
-  console.log(
-    `Triggering a ${status} event for conversation ${conversationId} with senderId ${senderId}`,
-  );
+  // console.log(
+  //   `Triggering a ${status} event for conversation ${conversationId} with senderId ${senderId}`,
+  // );
   await pusher.trigger(`${"chat-" + conversationId}`, "typing", {
     typing: status,
     senderId,

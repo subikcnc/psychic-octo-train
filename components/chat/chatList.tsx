@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Textarea } from "../ui/textarea";
-import { getMessages, sendMessage } from "@/lib/actions/message.action";
+import {
+  getMessages,
+  sendMessage,
+  updateMessageIsReadStatus,
+} from "@/lib/actions/message.action";
 import { ScrollArea } from "../ui/scroll-area";
 import Pusher from "pusher-js";
 import { getConversationId } from "@/lib/actions/conversation.action";
@@ -29,6 +33,7 @@ interface ChatListProps {
 const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   const { setToken } = useToken();
   const pusherRef = useRef<Pusher | null>(null);
+  const pusherNewMessagesRef = useRef<Pusher | null>(null);
   const pusherTypingRef = useRef<Pusher | null>(null);
   const [selectedUser, setSelectedUser] = useState<{
     email: string;
@@ -44,6 +49,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   const [showTypingIndicator, setShowTypingIndicator] =
     useState<boolean>(false);
   const router = useRouter();
+  const isMessageBoxFocused = useRef<boolean>(false);
 
   function throttle<Args extends unknown[], Return>(
     fn: (...args: Args) => Return,
@@ -62,6 +68,40 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     () => throttle(sendTypingStatus, 1500),
     [],
   );
+
+  // This effect is to bind to specific user pusher trigger for new messages
+  useEffect(() => {
+    if (!pusherNewMessagesRef.current) {
+      pusherNewMessagesRef.current = new Pusher(
+        process.env.NEXT_PUBLIC_PUSHER_KEY!,
+        {
+          cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+        },
+      );
+    }
+
+    const channel = pusherNewMessagesRef.current.subscribe(
+      `new-message-for-${loggedInUser.id}`,
+    );
+    channel.bind(
+      "new-incoming-message",
+      (data: {
+        senderId: string;
+        receiverId: string;
+        content: string;
+        conversationId: string;
+      }) => {
+        console.log("Data got from new message channel", data);
+      },
+    );
+
+    return () => {
+      channel.unbind_all();
+      pusherNewMessagesRef.current?.unsubscribe(
+        `new-message-for-${loggedInUser.id}`,
+      );
+    };
+  }, [loggedInUser]);
 
   // This effect is for showing a typing indicator
   useEffect(() => {
@@ -94,6 +134,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   useEffect(() => {
     if (isCurrentlyTyping) {
       // Now we need to delay calling the server action below
+      isMessageBoxFocused.current = true;
       if (!currentConversationId) return;
       console.log("Calling the server action when status is typing");
       throttledStatusUpdate({
@@ -139,14 +180,35 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     const channel = pusherRef.current.subscribe(channelName);
 
     channel.bind("new-message", (data: Message) => {
+      console.log(
+        "New messages got from pusher for current conversation",
+        data,
+      );
       setAllMessages((prev) => [...prev, data]);
+      // Here since we already got all the data we need to then update the isRead boolean to true
+      async function markMessagesRead() {
+        if (
+          !currentConversationId ||
+          !loggedInUser.id ||
+          !selectedUser ||
+          !selectedUser.id
+        )
+          return;
+        const response = await updateMessageIsReadStatus(
+          currentConversationId,
+          loggedInUser.id,
+          selectedUser.id,
+        );
+        console.log("Response after updating read status", response);
+      }
+      markMessagesRead();
     });
 
     return () => {
       channel.unbind_all();
       pusherRef?.current?.unsubscribe(channelName);
     };
-  }, [currentConversationId]);
+  }, [currentConversationId, loggedInUser.id, selectedUser]);
 
   useEffect(() => {
     const fetchConversationId = async () => {
@@ -167,6 +229,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
       const messages = await getMessages(currentConversationId);
       setAllMessages(messages);
     };
+
     fetchMessages();
   }, [currentConversationId]);
 
@@ -205,10 +268,10 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
       <div className="grid grid-cols-[1fr_2fr] h-full border border-chat-background">
         <div className="flex flex-col gap-1 bg-chat-background">
           <div className="px-5 py-6">
-            {`${loggedInUser.username}'s Chat`}{" "}
+            <span className="capitalize font-bold">{`${loggedInUser.username}'s Chat`}</span>{" "}
             {/* {showTypingIndicator && "is typing"} */}
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col flex-1">
             <div className="flex flex-col flex-1">
               {users.map(
                 (user) =>
@@ -232,9 +295,15 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
               )}
             </div>
             <div>
-              <Button variant="outline" onClick={handleLogout}>
-                Logout
-              </Button>
+              <div className="px-5 py-6">
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="w-full cursor-pointer"
+                >
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -288,6 +357,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
                 onChange={(e) => setMessageToSend(e.target.value)}
               />
               <Button
+                variant="default"
                 className="self-end mt-4 bg-chat-bubble-background text-black"
                 onClick={handleSend}
               >
@@ -297,7 +367,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
           </div>
         ) : (
           <div className="flex w-full items-center justify-center">
-            <p className="text-xl font-bold">No one to chat with</p>
+            <p className="text-xl font-bold">You are the only one here ☹️</p>
           </div>
         )}
       </div>

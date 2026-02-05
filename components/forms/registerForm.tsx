@@ -63,7 +63,7 @@ const RegisterForm = () => {
         setErrorMessage(data.error || "Registration failed");
         throw new Error(data.error);
       }
-      console.log("Registration successful", data);
+      // console.log("Registration successful", data);
 
       localStorage.setItem("accountToken", data.token);
       setToken(data.token);
@@ -97,7 +97,7 @@ const RegisterForm = () => {
         setLoginErrorMessage(data.error || "Login failed");
         throw new Error(data.error);
       }
-      console.log("Login successful", data);
+      // console.log("Login successful", data);
 
       localStorage.setItem("accountToken", data.token);
       setToken(data.token);

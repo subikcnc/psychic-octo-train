@@ -23,6 +23,6 @@ export async function getConversationId({
     .innerJoin(cp2, eq(cp1.conversationId, cp2.conversationId))
     .where(and(eq(cp1.accountId, senderId), eq(cp2.accountId, receiverId)));
 
-  console.log("This is the conversation", conversation);
+  // console.log("This is the conversation", conversation);
   return conversation?.conversationId;
 }
