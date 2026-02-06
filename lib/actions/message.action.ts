@@ -7,12 +7,36 @@ import {
   conversations,
   messages,
 } from "@/db/schema";
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { pusher } from "../utils/pusher";
-import { getUser } from "./user.action";
+// import { getUser } from "./user.action";
 
 export async function createMessage() {}
+
+export async function getUnreadMessagesCount(accountId: string) {
+  try {
+    // Query the db
+    const allUnreadMessages = await db
+      .select()
+      .from(messages)
+      .where(
+        and(eq(messages.accountId, accountId), eq(messages.isRead, false)),
+      );
+    return {
+      data: {
+        senderId: accountId,
+        unreadMessagesCount: allUnreadMessages.length,
+      },
+      errors: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      errors: error instanceof Error ? error.message : "Internal server error",
+    };
+  }
+}
 
 export async function getMessagesByUserId(userId: string) {
   try {
@@ -36,30 +60,17 @@ export async function getMessagesByUserId(userId: string) {
 
 export async function updateMessageIsReadStatus(
   conversationId: string,
-  senderId: string,
-  receiverId: string,
+  otherUserId: string, // The user whose messages we are marking as read
+  myUserId: string, // The user who is reading the messages
 ) {
-  // Here we need to update that the message has been read
-  // First look at the conversation participants table
-  // Get all the conversations, for that id, the accountId here is the sender,
-  // check if the currently logged in user is not in the accountid and has loaded the message, this marks the message as read
-  const { id: loggedInUserId } = await getUser();
-  // if (loggedInUserId === senderId) return;
-  // console.log("---------------------------------------------------------");
-  // console.log(
-  //   "This is the id in the server action",
-  //   loggedInUserId,
-  //   email,
-  //   username,
-  // );
-  // console.log("These are the parameter values", senderId, receiverId);
-  // if (loggedInUserId !== senderId) {
-  //   console.log("this is the reciver");
-  // } else {
-  //   console.log("This is the sender");
-  // }
-  // console.log("---------------------------------------------------------");
-  const allUnreadMessages = await db // This should be an array
+  console.log("Unread message update server action called");
+
+  // We want to mark messages as read if:
+  // 1. They belong to this conversation
+  // 2. They were NOT sent by myUserId (they were sent by otherUserId)
+  // 3. They are currently unread
+
+  const allUnreadMessages = await db
     .select({
       id: messages.id,
       accountId: messages.accountId,
@@ -68,8 +79,8 @@ export async function updateMessageIsReadStatus(
     .from(messages)
     .where(
       and(
-        ne(messages.accountId, loggedInUserId),
         eq(messages.conversationId, conversationId),
+        eq(messages.accountId, otherUserId),
         eq(messages.isRead, false),
       ),
     );
@@ -77,24 +88,24 @@ export async function updateMessageIsReadStatus(
   if (allUnreadMessages.length === 0) {
     return { message: "No unread messages" };
   }
-  // After getting all unread messages need to check the receiverId with the currently logged in user, if same then change the unread status to true
+
   await db
     .update(messages)
     .set({ isRead: true })
     .where(
       and(
-        ne(messages.accountId, loggedInUserId),
         eq(messages.conversationId, conversationId),
+        eq(messages.accountId, otherUserId),
         eq(messages.isRead, false),
       ),
     );
+
   return {
     conversationId,
-    senderId,
-    receiverId,
+    otherUserId,
+    myUserId,
     message: "Message read status updated",
-    allUnreadMessages,
-    loggedInId: loggedInUserId,
+    count: allUnreadMessages.length,
   };
 }
 

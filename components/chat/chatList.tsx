@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Textarea } from "../ui/textarea";
 import {
   getMessages,
+  getUnreadMessagesCount,
   sendMessage,
   updateMessageIsReadStatus,
 } from "@/lib/actions/message.action";
@@ -16,7 +17,7 @@ import { sendTypingStatus } from "@/lib/actions/typing.action";
 import { FunnyTypingIndicator } from "./funnyTypingIndicator";
 import { useToken } from "@/context/tokenProvider";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 
 interface Message {
   id: string;
@@ -55,7 +56,6 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     unreadMessagesCount?: number;
   } | null>(users.filter((user) => user.id !== loggedInUser.id)[0] || null);
   const [messageToSend, setMessageToSend] = useState<string>("");
-  // const [allMessages, setAllMessages] = useState<Messages>([]);
   const [currentConversationId, setCurrentConversationId] =
     useState<string>("");
   const [isCurrentlyTyping, setIsCurrentlyTyping] = useState<boolean>(false);
@@ -65,6 +65,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   const router = useRouter();
   const isMessageBoxFocused = useRef<boolean>(false);
 
+  // Declerative React Query to get all the messages on mount or when the currentConversationId changes
   const {
     data: allMessages = [],
     isLoading,
@@ -72,7 +73,46 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   } = useQuery<Message[]>({
     queryKey: ["messages", currentConversationId],
     queryFn: () => getMessages(currentConversationId),
+    enabled: !!currentConversationId,
+    refetchInterval: 0,
   });
+
+  // Since updating isRead is a mutation in the DB, we need to use useMutation from react query
+  const markMessagesReadMutation = useMutation({
+    mutationFn: ({
+      conversationId,
+      selectedUserId,
+      loggedInUserId,
+    }: {
+      conversationId: string;
+      selectedUserId: string;
+      loggedInUserId: string;
+    }) =>
+      updateMessageIsReadStatus(conversationId, selectedUserId, loggedInUserId),
+    onSuccess: (data, variables) => {
+      console.log("Marked messages read for", variables.conversationId, data);
+      queryClient.invalidateQueries({
+        queryKey: ["messages", variables.conversationId],
+      });
+    },
+  });
+
+  // Declarative React Query to get unread messages when new messages arrive for user who is not focused on  the chat
+  // const { data: allUnreadMessages, refetch: refetchUnreadMessages } = useQuery({
+  //   queryKey: ["newMessages", selectedUser?.id],
+  //   queryFn: ({ queryKey }) => {
+  //     const userId = queryKey[1] as string; // Get the id from the query key
+  //     if (!userId) {
+  //       return {
+  //         data: { senderId: "", unreadMessagesCount: 0 },
+  //         errors: null,
+  //       };
+  //     }
+  //     return getUnreadMessagesCount(userId);
+  //   },
+  //   enabled: false, // ✔ Disable automatic fetch on mount
+  //   refetchInterval: 5000,
+  // });
 
   function throttle<Args extends unknown[], Return>(
     fn: (...args: Args) => Return,
@@ -112,7 +152,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     );
     channel.bind(
       "new-incoming-message",
-      (data: {
+      async (data: {
         senderId: string;
         receiverId: string;
         content: string;
@@ -121,11 +161,14 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
         const { senderId, receiverId } = data;
         console.log("when new message received", senderId, selectedUser?.id);
         if (selectedUser && senderId !== selectedUser.id) {
-          console.log(
-            "Data got from new message channel",
-            senderId,
-            selectedUser.id,
-          );
+          // In this case we need to query the DB to get all the unread messages count for this conversation
+          const fetchUnread = async (senderId: string) => {
+            const data = await queryClient.fetchQuery({
+              queryKey: ["newMessages", senderId],
+              queryFn: () => getUnreadMessagesCount(senderId),
+            });
+            console.log("After fetching unread messages", data);
+          };
         }
       },
     );
@@ -136,7 +179,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
         `new-message-for-${loggedInUser.id}`,
       );
     };
-  }, [loggedInUser]);
+  }, [loggedInUser, selectedUser]);
 
   // This effect is for showing a typing indicator
   useEffect(() => {
@@ -215,32 +258,39 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     const channel = pusherRef.current.subscribe(channelName);
 
     channel.bind("new-message", (data: Message) => {
-      console.log(
-        "New messages got from pusher for current conversation",
-        data,
-      );
+      // console.log(
+      //   "New messages got from pusher for current conversation",
+      //   data,
+      // );
       queryClient.setQueryData(
         ["messages", currentConversationId],
         (old: Message[]) => [...old, data],
       );
       // setAllMessages((prev) => [...prev, data]);
       // Here since we already got all the data we need to then update the isRead boolean to true
-      async function markMessagesRead() {
-        if (
-          !currentConversationId ||
-          !loggedInUser.id ||
-          !selectedUser ||
-          !selectedUser.id
-        )
-          return;
-        const response = await updateMessageIsReadStatus(
-          currentConversationId,
-          loggedInUser.id,
-          selectedUser.id,
-        );
-        console.log("Response after updating read status", response);
+      if (currentConversationId && loggedInUser.id && selectedUser?.id) {
+        markMessagesReadMutation.mutate({
+          conversationId: currentConversationId,
+          selectedUserId: selectedUser.id,
+          loggedInUserId: loggedInUser.id,
+        });
       }
-      markMessagesRead();
+      // async function markMessagesRead() {
+      //   if (
+      //     !currentConversationId ||
+      //     !loggedInUser.id ||
+      //     !selectedUser ||
+      //     !selectedUser.id
+      //   )
+      //     return;
+      //   const response = await updateMessageIsReadStatus(
+      //     currentConversationId,
+      //     loggedInUser.id,
+      //     selectedUser.id,
+      //   );
+      //   console.log("Response after updating read status", response);
+      // }
+      // markMessagesRead();
     });
 
     return () => {
