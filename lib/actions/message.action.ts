@@ -43,22 +43,22 @@ export async function updateMessageIsReadStatus(
   // First look at the conversation participants table
   // Get all the conversations, for that id, the accountId here is the sender,
   // check if the currently logged in user is not in the accountid and has loaded the message, this marks the message as read
-  const { id: loggedInUserId, email, username } = await getUser();
+  const { id: loggedInUserId } = await getUser();
   // if (loggedInUserId === senderId) return;
-  console.log("---------------------------------------------------------");
-  console.log(
-    "This is the id in the server action",
-    loggedInUserId,
-    email,
-    username,
-  );
-  console.log("These are the parameter values", senderId, receiverId);
-  if (loggedInUserId !== senderId) {
-    console.log("this is the reciver");
-  } else {
-    console.log("This is the sender");
-  }
-  console.log("---------------------------------------------------------");
+  // console.log("---------------------------------------------------------");
+  // console.log(
+  //   "This is the id in the server action",
+  //   loggedInUserId,
+  //   email,
+  //   username,
+  // );
+  // console.log("These are the parameter values", senderId, receiverId);
+  // if (loggedInUserId !== senderId) {
+  //   console.log("this is the reciver");
+  // } else {
+  //   console.log("This is the sender");
+  // }
+  // console.log("---------------------------------------------------------");
   const allUnreadMessages = await db // This should be an array
     .select({
       id: messages.id,
@@ -255,14 +255,7 @@ export async function sendMessage({
         conversationId: JSON.parse(JSON.stringify(conversation.id)),
         message: "New Message sent successfully",
       };
-
-      //   await db.insert(conversationParticipants).values({});
     }
-
-    // const conversation = await db
-    //   .select()
-    //   .from(conversations)
-    //   .where(eq(conversations.id, conversationId));
   } catch (error) {
     throw new Error(
       error instanceof Error ? error.message : "Internal server error",

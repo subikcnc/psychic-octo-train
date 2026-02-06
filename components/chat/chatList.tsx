@@ -16,6 +16,17 @@ import { sendTypingStatus } from "@/lib/actions/typing.action";
 import { FunnyTypingIndicator } from "./funnyTypingIndicator";
 import { useToken } from "@/context/tokenProvider";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+interface Message {
+  id: string;
+  accountId: string;
+  content: string;
+  conversationId: string;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface ChatListProps {
   loggedInUser: {
@@ -27,21 +38,24 @@ interface ChatListProps {
     id: string;
     email: string;
     name: string;
+    unreadMessagesCount: 0;
   }[];
 }
-
 const ChatList = ({ loggedInUser, users }: ChatListProps) => {
+  const queryClient = useQueryClient();
   const { setToken } = useToken();
   const pusherRef = useRef<Pusher | null>(null);
   const pusherNewMessagesRef = useRef<Pusher | null>(null);
   const pusherTypingRef = useRef<Pusher | null>(null);
+  // const [messages, setMessages] = useState<Message[]
   const [selectedUser, setSelectedUser] = useState<{
     email: string;
     name: string;
     id: string;
+    unreadMessagesCount?: number;
   } | null>(users.filter((user) => user.id !== loggedInUser.id)[0] || null);
   const [messageToSend, setMessageToSend] = useState<string>("");
-  const [allMessages, setAllMessages] = useState<Messages>([]);
+  // const [allMessages, setAllMessages] = useState<Messages>([]);
   const [currentConversationId, setCurrentConversationId] =
     useState<string>("");
   const [isCurrentlyTyping, setIsCurrentlyTyping] = useState<boolean>(false);
@@ -50,6 +64,15 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
     useState<boolean>(false);
   const router = useRouter();
   const isMessageBoxFocused = useRef<boolean>(false);
+
+  const {
+    data: allMessages = [],
+    isLoading,
+    refetch,
+  } = useQuery<Message[]>({
+    queryKey: ["messages", currentConversationId],
+    queryFn: () => getMessages(currentConversationId),
+  });
 
   function throttle<Args extends unknown[], Return>(
     fn: (...args: Args) => Return,
@@ -95,7 +118,15 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
         content: string;
         conversationId: string;
       }) => {
-        console.log("Data got from new message channel", data);
+        const { senderId, receiverId } = data;
+        console.log("when new message received", senderId, selectedUser?.id);
+        if (selectedUser && senderId !== selectedUser.id) {
+          console.log(
+            "Data got from new message channel",
+            senderId,
+            selectedUser.id,
+          );
+        }
       },
     );
 
@@ -188,7 +219,11 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
         "New messages got from pusher for current conversation",
         data,
       );
-      setAllMessages((prev) => [...prev, data]);
+      queryClient.setQueryData(
+        ["messages", currentConversationId],
+        (old: Message[]) => [...old, data],
+      );
+      // setAllMessages((prev) => [...prev, data]);
       // Here since we already got all the data we need to then update the isRead boolean to true
       async function markMessagesRead() {
         if (
@@ -212,7 +247,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
       channel.unbind_all();
       pusherRef?.current?.unsubscribe(channelName);
     };
-  }, [currentConversationId, loggedInUser.id, selectedUser]);
+  }, [currentConversationId, loggedInUser.id, selectedUser, queryClient]);
 
   useEffect(() => {
     const fetchConversationId = async () => {
@@ -227,15 +262,15 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
   }, [loggedInUser, selectedUser]);
 
   // Need to fetch the initial messages when the component mounts and the user selects a particular user
-  useEffect(() => {
-    const fetchMessages = async () => {
-      if (!currentConversationId) return;
-      const messages = await getMessages(currentConversationId);
-      setAllMessages(messages);
-    };
-    console.log("Fetching new messages since the conversation id changed");
-    fetchMessages();
-  }, [currentConversationId]);
+  // useEffect(() => {
+  //   const fetchMessages = async () => {
+  //     if (!currentConversationId) return;
+  //     const messages = await getMessages(currentConversationId);
+  //     setAllMessages(messages);
+  //   };
+  //   console.log("Fetching new messages since the conversation id changed");
+  //   fetchMessages();
+  // }, [currentConversationId]);
 
   const handleSend = async () => {
     console.log("Handling send", loggedInUser.email, selectedUser?.email);
@@ -287,6 +322,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
                         setCurrentConversationId("");
                       }}
                       variant="outline"
+                      size="lg"
                       className={cn(
                         "w-full justify-start rounded-none border-0 px-5! py-2! cursor-pointer shadow-none bg-transparent",
                         selectedUser?.email === user.email &&
@@ -329,17 +365,37 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
                         message.accountId === loggedInUser.id && "justify-end",
                       )}
                     >
-                      <p
+                      <div
                         className={cn(
-                          message.accountId === loggedInUser.id &&
-                            "bg-chat-bubble-background text-black",
+                          "flex gap-2 items-center",
                           message.accountId !== loggedInUser.id &&
-                            "bg-gray-300",
-                          "p-2 rounded-md m-0",
+                            "flex-row-reverse",
                         )}
                       >
-                        {message.content}
-                      </p>
+                        <p
+                          className={cn(
+                            message.accountId === loggedInUser.id &&
+                              "bg-chat-bubble-background text-black",
+                            message.accountId !== loggedInUser.id &&
+                              "bg-gray-200",
+                            "p-2 rounded-md m-0",
+                          )}
+                        >
+                          {message.content}
+                        </p>
+                        <span
+                          className={cn(
+                            "flex size-8 rounded-full justify-center items-center text-xs font-bold",
+                            message.accountId === loggedInUser.id
+                              ? "bg-chat-bubble-background text-black"
+                              : "bg-gray-200",
+                          )}
+                        >
+                          {message.accountId === loggedInUser.id
+                            ? loggedInUser.username.charAt(0).toUpperCase()
+                            : selectedUser.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
                     </div>
                   ))}
                   {showTypingIndicator && loggedInUser.id && (
@@ -362,7 +418,7 @@ const ChatList = ({ loggedInUser, users }: ChatListProps) => {
               />
               <Button
                 variant="default"
-                className="self-end mt-4 bg-chat-bubble-background text-black"
+                className="self-end mt-4 bg-chat-bubble-background text-black cursor-pointer hover:bg-chat-background"
                 onClick={handleSend}
               >
                 Send
